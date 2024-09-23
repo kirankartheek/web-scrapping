@@ -20,4 +20,4 @@ class RedisDaoImpl(CacheDao):
                 "image": product_dto.image,
                 "name": product_dto.name  # Saving the name for consistency
             })
-            print(f"Saved/Updated product: {product_dto.name} with price: {product_dto.price}")
+            # print(f"Saved/Updated product: {product_dto.name} with price: {product_dto.price}")

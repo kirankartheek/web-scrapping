@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import json
-from config.config import RETRY_LIMIT
+from config.config import RETRY_LIMIT, RETRY_INTERVAL
 from dao.cache.impl.redis_dao_impl import RedisDaoImpl
 from dao.local.impl.json_dao_impl import JsonDaoImpl
 from config import config
@@ -21,56 +21,105 @@ class ProductsScrapper:
         proxies = {"http": proxy, "https": proxy} if proxy else None
         total_count = 0
         print("Starting the scraping process...")
-        for page in range(1, page_limit + 1):
+        page = 1
+        encountered_404 = False  # Track if 404 was encountered
+
+        # If page_limit is None, scrape till the last page
+        while page_limit is None or page <= page_limit:
             url = f"{self.base_url}{page}/"
             retries = 0
+            response = None  # Initialize response to None
+
             while retries < RETRY_LIMIT:
                 try:
                     response = requests.get(url, proxies=proxies, timeout=5)
+
+                    # Check for 404 status to stop scraping more pages
+                    if response.status_code == 404:
+                        print(f"Page not found (404) encountered on page {page}. Stopping further page scraping.")
+                        encountered_404 = True  # Mark that 404 is encountered
+                        break  # Break out of the loop, but continue saving the products
+
                     response.raise_for_status()  # Raise error if status is not 200
                     soup = BeautifulSoup(response.content, "html.parser")
+
+                    # Parse the products
+                    print(f"Page being scraped... {page}")
                     products = self._parse_page(soup)
                     total_count += len(products)
                     all_products.extend(products)
-                    break
+                    break  # Exit the retry loop on success
+
+                except requests.HTTPError as http_err:
+                    if response is not None and response.status_code == 404:
+                        # Stop further scraping if 404 encountered
+                        print(f"404 error on page {page}, stopping further scraping.")
+                        encountered_404 = True
+                        break  # Break the retry loop if 404 is encountered
+                    else:
+                        retries += 1
+                        print(f"HTTP error occurred on page {page}: {http_err}")
+                        sleep(2)  # Retry after a delay
+                        if retries == RETRY_LIMIT:
+                            return False, total_count  # Stop if all retries fail
+
                 except requests.RequestException as e:
                     retries += 1
-                    sleep(2)  # Simple retry backoff
+                    print(f"Request error on page {page}: {e}")
+                    sleep(2)
                     if retries == RETRY_LIMIT:
-                        return False, total_count  # Return if all retries fail
+                        return False, total_count  # Stop if all retries fail
 
-        print("website is successfully scrapped");
+            # Stop fetching new pages if 404 encountered
+            if encountered_404:
+                break
 
-        # Save to local storage
+            page += 1
+
+        print("data scraping finished.")
+        # Save to local storage after scraping is complete
         self.local_storage.save_product_details(all_products)
 
-        print("data is saved locally");
+        print("data saved to local file.")
 
+        # Save to cache after scraping is complete
         for product in all_products:
             self.cache.save_product_details(product.name, product)
 
-        print("data is saved in cache")
+        print("data saved to redis cache")
+
         return True, total_count
 
     def _parse_page(self, soup: BeautifulSoup):
         products = []
         items = soup.select(".product")  # Modify based on the website's HTML structure
-        print("Starting Product Details Scrapping for a page...")
         for item in items:
             try:
                 # Extract product name
-                name = item.select_one(".woo-loop-product__title").text.strip()
+                name = item.select_one(".woo-loop-product__title")
+                if not name:
+                    # Skip if name is not present
+                    print("Skipping due to name not being present")
+                    continue
+                name = name.text.strip()
 
                 # Extract product price
-                price = item.select_one(".woocommerce-Price-amount").text.strip()
-                price = price.replace("₹", "").strip()
+                price = item.select_one(".woocommerce-Price-amount")
+                if price:
+                    price = price.text.strip().replace("₹", "").strip()
+                else:
+                    price = "-1"  # Set price to -1 if not available
 
-                # Extract product image URL
-                image = item.select_one("img")["data-lazy-src"]
+
+                # Extract product image URL (optional, default to empty string if not found)
+                image = item.select_one("img")
+                if image:
+                    image = image.get("data-lazy-src", "").strip()  # Get 'data-lazy-src' or set to ""
+                else:
+                    image = ""  # Set image to empty string if not available
 
                 product_dto = ProductDto(name=name, price=price, image=image)
                 products.append(product_dto)
             except Exception as e:
-                print(f"Error parsing product: {e}")  # Log any errors
-        print("Product Details scrapped for a page")
+                print(f"Error parsing product: {item} with Exception {e}")  # Log any errors
         return products

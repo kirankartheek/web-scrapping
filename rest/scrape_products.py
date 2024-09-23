@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field, validator
+
 from service.products_scrapper import ProductsScrapper
 from config import config
 from utils.validation import validate_token
@@ -8,7 +9,7 @@ router = APIRouter()
 
 # Request model
 class ScrapeRequest(BaseModel):
-    pageLimit: int = Field(..., gt=0, description="The number of pages to scrape (must be greater than 0)")
+    pageLimit: int =  Field(default=200, gt=0, description="The number of pages to scrape (must be greater than or equal to 1 and default value is set to 200)")
     proxy: str = Field(None, description="The proxy string to use for scraping (optional)")
 
     @validator('proxy')
@@ -24,7 +25,7 @@ class ScrapeResponse(BaseModel):
 
 # API endpoint
 @router.post("/scrape/products", response_model=ScrapeResponse)
-async def scrape_catalogue(request: ScrapeRequest, token: str = Depends(validate_token)):
+async def scrape_catalogue(request: ScrapeRequest, token: str = Header(...)):
     scraper_service = ProductsScrapper()
     success, total_count = scraper_service.scrape_data(request.pageLimit, request.proxy)
     return ScrapeResponse(success=success, total_count=total_count)

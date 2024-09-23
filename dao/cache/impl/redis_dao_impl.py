@@ -9,14 +9,15 @@ class RedisDaoImpl(CacheDao):
         self.redis_client = redis.Redis(host=host, port=port, db=db)
 
     def save_product_details(self, key, product_dto: ProductDto):
-        # Convert the value dictionary to a JSON string
-        value_json = json.dumps(product_dto.to_dict())
+        # Get the current product details from Redis
+        current_product = self.redis_client.hgetall(product_dto.name)
 
-        # Retrieve the current value from Redis
-        current_value = self.redis_client.get(key)
-
-        # Compare current value with new value
-        if current_value is None or current_value.decode('utf-8') != value_json:
-            # Only update if the value has changed
-            self.redis_client.set(key, value_json)
-            print(f"Updated Redis key: {key}")
+        # Check if the key exists and if the price has changed
+        if not current_product or current_product.get(b"price").decode('utf-8') != product_dto.price:
+            # Store the complete product details in Redis
+            self.redis_client.hset(product_dto.name, mapping={
+                "price": product_dto.price,
+                "image": product_dto.image,
+                "name": product_dto.name  # Saving the name for consistency
+            })
+            print(f"Saved/Updated product: {product_dto.name} with price: {product_dto.price}")

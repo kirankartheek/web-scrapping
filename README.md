@@ -22,3 +22,7 @@ To get started with this project, follow the instructions below to set up your e
 3. **Install Dependencies:**
    ```bash
    pip install -r requirements.txt
+
+## Documentation
+
+[`Web-Scrapper Application`](https://www.notion.so/WebScrapping-10af6fef3263802a9c76f2e3f68b0912?pvs=4)

@@ -86,7 +86,7 @@ class ProductsScrapper:
 
         # Save to cache after scraping is complete
         for product in all_products:
-            asyncio.create_task(self.cache.save_product_details(product.name, product))
+            asyncio.create_task(self.cache.save_product_details(product.product_title, product))
 
         print("data saved to redis cache")
 

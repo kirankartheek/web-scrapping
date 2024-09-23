@@ -1,3 +1,5 @@
+import asyncio
+
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -59,16 +61,16 @@ class ProductsScrapper:
                     else:
                         retries += 1
                         print(f"HTTP error occurred on page {page}: {http_err}")
-                        sleep(2)  # Retry after a delay
+                        sleep(RETRY_INTERVAL)  # Retry after a delay
                         if retries == RETRY_LIMIT:
-                            return False, total_count  # Stop if all retries fail
+                            return False, 0  # Stop if all retries fail
 
                 except requests.RequestException as e:
                     retries += 1
                     print(f"Request error on page {page}: {e}")
-                    sleep(2)
+                    sleep(RETRY_INTERVAL)
                     if retries == RETRY_LIMIT:
-                        return False, total_count  # Stop if all retries fail
+                        return False, 0  # Stop if all retries fail
 
             # Stop fetching new pages if 404 encountered
             if encountered_404:
@@ -84,11 +86,13 @@ class ProductsScrapper:
 
         # Save to cache after scraping is complete
         for product in all_products:
-            self.cache.save_product_details(product.name, product)
+            asyncio.create_task(self.cache.save_product_details(product.name, product))
 
         print("data saved to redis cache")
 
         return True, total_count
+
+
 
     def _parse_page(self, soup: BeautifulSoup):
         products = []

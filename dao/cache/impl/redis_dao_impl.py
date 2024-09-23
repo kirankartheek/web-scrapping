@@ -8,7 +8,7 @@ class RedisDaoImpl(CacheDao):
     def __init__(self, host='localhost', port=6379, db=0):
         self.redis_client = redis.Redis(host=host, port=port, db=db)
 
-    def save_product_details(self, key, product_dto: ProductDto):
+    async def save_product_details(self, key, product_dto: ProductDto):
         # Get the current product details from Redis
         current_product = self.redis_client.hgetall(product_dto.name)
 
